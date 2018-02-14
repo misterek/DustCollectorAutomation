@@ -27,15 +27,20 @@ definition(
 
 preferences {
 	section("Dust Collection") {
-        input "meters", "capability.powerMeter", required:true, title:"Tools to monitor", multiple:true
+        input "meters", "capability.powerMeter", required:true, title:"Tools to Monitor", multiple:true
         input "dustcollector", "capability.switch", required:true, title:"Dust Collector"
+        paragraph "Delay is how long you want the dust collector to stay on after all tools have been turned off.  This allows you to keep the dust collector from turing on and off too much."
         input name: "delay", type:"number", title: "Delay", defaultValue: "5"
+        paragraph "Threshold is the amount of power (in watts) you want a tool to draw to be considered on.  Anything under this will be considered off.  Anything over will be considered on."
+        input name: "threshold", type:"number", title: "Threshold", defaultValue: "50"
+        
 
 	}        
 }
 
 def installed() {
 	//log.debug "Installed with settings: ${settings}"
+    state.powerMap = [:]
 	initialize()
 }
 
@@ -45,40 +50,77 @@ def updated() {
 	initialize()
 }
 
-def initialize() {   
+def initialize() {    
+    
     //Subscribe to power updates on the meters
     state.delay = 0
+    for (meter in meters){
+        state.powerMap[meter.id] = [:]
+        state.powerMap[meter.id]["date"] = null
+        state.powerMap[meter.id]["previousPower"] = 0
+    }
     subscribe(meters, "power", meterHandler)    
 }
 
 def meterHandler(evt){    
     
-    if( state.delay == 0 ){
-    	checklights()
-    }
+  	checklights()
+
+}
+
+def secondsAgo(seconds){
+    Calendar cal = Calendar.getInstance();
+    cal.setTime(new Date());  
+    cal.add(Calendar.SECOND, seconds * -1);
+    return cal.getTime();   
 }
 
 def checklights(){
-    log.debug "Check LIghts"
-    state.delay = 0
-    boolean allOff = true
+    
+    def toolOn = false
+    def toolTurnedOff = false
+
     for (meter in meters){
-        if (meter.currentPower > 10){
-            dustcollector.on()
-            
-            // If anything is on, check again in 5 seconds
-            state.delay = delay
-            runIn(delay, checklights)
-            
-            //Don't remember what I was doing here
-            //state.mydate = new Date()
-            
-            allOff = false
+        if (meter.currentPower > threshold){
+            toolOn = true
+        }
+        
+        // The tool turned off
+        if( meter.currentPower <= threshold && state.powerMap[meter.id]["previousPower"] > threshold){
+            toolTurnedOff = true
+        }
+        
+        state.powerMap[meter.id]["previousPower"] = meter.currentPower
+    }
+    
+   
+    if ( toolOn == true){
+        dustcollector.on()
+        state.allOff = null
+    }
+    
+    if ( toolOn == false && toolTurnedOff == true ){
+        // set all off date
+        state.allOff = new Date()
+    }
+    
+    if ( toolOn == false /* And the dustcollector is on */ ) {
+        if ( state.allOff != null){
+            // Still not sure why, but allOff is becoming a string at times. So turn it back to a date.
+            if (state.allOff instanceof String){
+                state.allOff = Date.parse("yyyy-MM-dd'T'HH:mm:ssZ", state.allOff)
+            }
+
+            if ( state.allOff.before( secondsAgo(delay)) ){
+                dustcollector.off()
+                state.allOff = null             
+            }else{
+                runIn(1, checklights)
+            }
         }
     }
     
-    if (allOff == true){
-        dustcollector.off()
-    }       
+    
+
 }
 
