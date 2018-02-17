@@ -39,20 +39,17 @@ preferences {
 }
 
 def installed() {
-	//log.debug "Installed with settings: ${settings}"
     state.powerMap = [:]
 	initialize()
 }
 
 def updated() {
-	//log.debug "Updated with settings: ${settings}"
 	unsubscribe()
 	initialize()
 }
 
 def initialize() {    
     
-    //Subscribe to power updates on the meters
     state.delay = 0
     for (meter in meters){
         state.powerMap[meter.id] = [:]
@@ -76,7 +73,7 @@ def secondsAgo(seconds){
 }
 
 def checklights(){
-    
+  
     def toolOn = false
     def toolTurnedOff = false
 
@@ -104,7 +101,7 @@ def checklights(){
         state.allOff = new Date()
     }
     
-    if ( toolOn == false /* And the dustcollector is on */ ) {
+    if ( toolOn == false ) {
         if ( state.allOff != null){
             // Still not sure why, but allOff is becoming a string at times. So turn it back to a date.
             if (state.allOff instanceof String){
@@ -119,8 +116,6 @@ def checklights(){
             }
         }
     }
-    
-    
 
 }
 
